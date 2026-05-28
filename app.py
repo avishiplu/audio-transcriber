@@ -37,14 +37,14 @@ if uploaded_file is not None:
             audio = AudioSegment.from_file(BytesIO(audio_bytes))
 
             audio = audio.set_channels(1)
-            audio = audio.set_frame_rate(16000)
+            audio = audio.set_frame_rate(12000)
 
             compressed_audio = BytesIO()
 
             audio.export(
                 compressed_audio,
                 format="mp3",
-                bitrate="64k"
+                bitrate="24k"
             )
 
             compressed_audio.seek(0)
