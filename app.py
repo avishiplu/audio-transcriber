@@ -46,52 +46,46 @@ if uploaded_file is not None:
             audio_bytes = uploaded_file.read()
             audio = AudioSegment.from_file(BytesIO(audio_bytes))
 
-        file_size_mb = len(audio_bytes) / (1024 * 1024)
-
+        chunk_length_ms = 10 * 60 * 1000  # 10 minutes per chunk
         chunks = []
 
-        if file_size_mb <= MAX_SIZE_MB:
+        for start_ms in range(0, len(audio), chunk_length_ms):
+            end_ms = start_ms + chunk_length_ms
+            chunk = audio[start_ms:end_ms]
 
-            chunk_file = BytesIO(audio_bytes)
-            chunk_file.name = uploaded_file.name
+            chunk_file = BytesIO()
+            chunk.export(
+                chunk_file,
+                format="mp3",
+                bitrate="64k"
+            )
+
+            chunk_file.seek(0)
+            chunk_file.name = f"{original_name}_part_{len(chunks) + 1}.mp3"
             chunks.append(chunk_file)
 
-            st.info("Audio is under 25 MB. No split needed.")
+        st.info(f"Audio split into {len(chunks)} parts.")
 
-        else:
-
-            chunk_length_ms = 10 * 60 * 1000
-            chunks = []
-
-            for start_ms in range(0, len(audio), chunk_length_ms):
-                end_ms = start_ms + chunk_length_ms
-                chunk = audio[start_ms:end_ms]
-
-                chunk_file = BytesIO()
-
-                chunk.export(
-                    chunk_file,
-                    format="mp3",
-                    bitrate="64k"
-                )
-
-                chunk_file.seek(0)
-                chunk_file.name = f"{original_name}_part_{len(chunks) + 1}.mp3"
-
-                chunks.append(chunk_file)
-
-            st.info(f"Audio split into {len(chunks)} parts.")
         all_transcripts = []
 
         for index, chunk_file in enumerate(chunks, start=1):
             with st.spinner(f"Transcribing part {index} of {len(chunks)}..."):
                 transcript = client.audio.transcriptions.create(
-                    model="gpt-4o-mini-transcribe",
+                    model="gpt-4o-transcribe-diarize",
                     file=chunk_file,
-                    language="de"
+                    language="de",
+                    response_format="diarized_json",
+                    chunking_strategy="auto"
                 )
 
-            all_transcripts.append(f"\n\n--- Part {index} ---\n\n{transcript.text}")
+            part_text = f"\n\n--- Part {index} ---\n\n"
+
+            for segment in transcript.segments:
+                speaker = segment.speaker
+                text = segment.text
+                part_text += f"{speaker}:\n{text}\n\n"
+
+            all_transcripts.append(part_text)
 
         transcript_text = "".join(all_transcripts)
        
