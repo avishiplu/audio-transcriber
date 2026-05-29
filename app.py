@@ -31,40 +31,45 @@ if uploaded_file is not None:
 
     st.success(f"Audio uploaded: {uploaded_file.name}")
 
-    if st.button("Compress and Transcribe"):
-        with st.spinner("Compressing audio..."):
+    if st.button("Split and Transcribe"):
+        with st.spinner("Reading audio..."):
             audio_bytes = uploaded_file.read()
             audio = AudioSegment.from_file(BytesIO(audio_bytes))
 
-            audio = audio.set_channels(1)
-            audio = audio.set_frame_rate(12000)
+        chunk_length_ms = 10 * 60 * 1000  # 10 minutes per chunk
+        chunks = []
 
-            compressed_audio = BytesIO()
+        for start_ms in range(0, len(audio), chunk_length_ms):
+            end_ms = start_ms + chunk_length_ms
+            chunk = audio[start_ms:end_ms]
 
-            audio.export(
-                compressed_audio,
+            chunk_file = BytesIO()
+            chunk.export(
+                chunk_file,
                 format="mp3",
-                bitrate="24k"
+                bitrate="64k"
             )
 
-            compressed_audio.seek(0)
-            compressed_audio.name = f"{original_name}_compressed.mp3"
+            chunk_file.seek(0)
+            chunk_file.name = f"{original_name}_part_{len(chunks) + 1}.mp3"
+            chunks.append(chunk_file)
 
-        compressed_size_mb = len(compressed_audio.getvalue()) / (1024 * 1024)
-        st.info(f"Compressed file size: {compressed_size_mb:.2f} MB")
+        st.info(f"Audio split into {len(chunks)} parts.")
 
-        if compressed_size_mb > MAX_SIZE_MB:
-            st.error("Compressed audio is still larger than 25 MB.")
-            st.stop()
+        all_transcripts = []
 
-        with st.spinner("Transcribing compressed audio..."):
-            transcript = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=compressed_audio,
-                language="de"
-            )
+        for index, chunk_file in enumerate(chunks, start=1):
+            with st.spinner(f"Transcribing part {index} of {len(chunks)}..."):
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=chunk_file,
+                    language="de"
+                )
 
-        transcript_text = transcript.text
+            all_transcripts.append(f"\n\n--- Part {index} ---\n\n{transcript.text}")
+
+        transcript_text = "".join(all_transcripts)
+       
         transcript_file_name = f"{original_name}.txt"
 
         st.success("Transcription finished.")
