@@ -21,7 +21,7 @@ client = OpenAI(api_key=api_key)
 @st.cache_resource
 def load_local_whisper_model():
     return WhisperModel(
-        "small",
+        "large-v3-turbo",
         device="cpu",
         compute_type="int8"
     )
