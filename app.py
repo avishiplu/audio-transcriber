@@ -18,11 +18,13 @@ if not api_key:
 
 client = OpenAI(api_key=api_key)
 
-local_whisper_model = WhisperModel(
-    "small",
-    device="cpu",
-    compute_type="int8"
-)
+@st.cache_resource
+def load_local_whisper_model():
+    return WhisperModel(
+        "small",
+        device="cpu",
+        compute_type="int8"
+    )
 
 MAX_SIZE_MB = 25
 
@@ -125,6 +127,7 @@ if uploaded_file is not None:
 
             if whisper_button_clicked:
                 with st.spinner(f"Transcribing part {index} of {len(chunks)} with Local Whisper..."):
+                    local_whisper_model = load_local_whisper_model()
                     segments, info = local_whisper_model.transcribe(
                         chunk_file,
                         language="de"
