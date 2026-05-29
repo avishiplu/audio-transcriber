@@ -28,10 +28,19 @@ MAX_SIZE_MB = 25
 
 st.title("German Class Audio Transcriber")
 
-uploaded_file = st.file_uploader(
-    "Upload your audio file",
-    type=["mp3", "mp4", "m4a", "wav", "mpeg", "mpg", "mpeg4"]
+input_method = st.radio(
+    "Choose audio input method",
+    ["Upload audio file", "Record audio directly"]
 )
+
+if input_method == "Upload audio file":
+    uploaded_file = st.file_uploader(
+        "Upload your audio file",
+        type=["mp3", "mp4", "m4a", "wav", "mpeg", "mpg", "mpeg4"]
+    )
+
+else:
+    uploaded_file = st.audio_input("Record your audio")
 
 if uploaded_file is not None:
     original_name = Path(uploaded_file.name).stem
