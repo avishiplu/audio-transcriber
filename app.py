@@ -164,7 +164,6 @@ if uploaded_file is not None:
                     transcript = client.audio.transcriptions.create(
                         model="gpt-4o-transcribe-diarize",
                         file=chunk_file,
-                        language="de",
                         response_format="diarized_json",
                         chunking_strategy="auto"
                     )
@@ -183,7 +182,6 @@ if uploaded_file is not None:
                     local_whisper_model = load_local_whisper_model()
                     segments, info = local_whisper_model.transcribe(
                         chunk_file,
-                        language="de"
                     )
 
                 part_text = f"\n\n--- Part {index} ---\n\n"
@@ -206,11 +204,13 @@ if uploaded_file is not None:
                     {
                         "role": "system",
                         "content": (
-                            "You clean and organize German class transcripts. "
-                            "Do not add new information. Do not summarize. "
+                            "You clean and organize audio transcripts in the same language as the transcript. "
+                            "Do not translate the transcript. "
+                            "Do not add new information. "
+                            "Do not summarize. "
                             "Do not remove important content. "
-                            "Only fix obvious transcription mistakes, improve spacing, "
-                            "organize speaker labels, and make the transcript easier to read."
+                            "Only fix obvious transcription mistakes, improve spacing, punctuation, "
+                            "speaker labels, and make the transcript easier to read."
                         )
                     },
                     {
