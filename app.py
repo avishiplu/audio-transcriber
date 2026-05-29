@@ -88,7 +88,32 @@ if uploaded_file is not None:
             all_transcripts.append(part_text)
 
         transcript_text = "".join(all_transcripts)
-       
+
+        with st.spinner("Organizing transcript with AI..."):
+            cleanup_response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You clean and organize German class transcripts. "
+                            "Do not add new information. Do not summarize. "
+                            "Do not remove important content. "
+                            "Only fix obvious transcription mistakes, improve spacing, "
+                            "organize speaker labels, and make the transcript easier to read."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": transcript_text
+                    }
+                ],
+                temperature=0.2
+            )
+
+            transcript_text = cleanup_response.choices[0].message.content
+
+
         transcript_file_name = f"{original_name}.txt"
 
         st.success("Transcription finished.")
