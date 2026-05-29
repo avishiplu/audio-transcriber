@@ -6,6 +6,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
 from pydub import AudioSegment
+from faster_whisper import WhisperModel
 
 load_dotenv()
 
@@ -16,6 +17,12 @@ if not api_key:
     st.stop()
 
 client = OpenAI(api_key=api_key)
+
+local_whisper_model = WhisperModel(
+    "small",
+    device="cpu",
+    compute_type="int8"
+)
 
 MAX_SIZE_MB = 25
 
@@ -31,10 +38,17 @@ if uploaded_file is not None:
 
     st.success(f"Audio uploaded: {uploaded_file.name}")
 
-    button_clicked = st.button(
-        "Split and Transcribe",
+    openai_button_clicked = st.button(
+        "Transcribe with OpenAI",
         disabled=st.session_state.get("processing", False)
     )
+
+    whisper_button_clicked = st.button(
+        "Transcribe with Local Whisper",
+        disabled=st.session_state.get("processing", False)
+    )
+
+    button_clicked = openai_button_clicked or whisper_button_clicked
 
     if button_clicked:
         st.session_state["processing"] = True
@@ -69,26 +83,40 @@ if uploaded_file is not None:
         all_transcripts = []
 
         for index, chunk_file in enumerate(chunks, start=1):
-            with st.spinner(f"Transcribing part {index} of {len(chunks)}..."):
-                transcript = client.audio.transcriptions.create(
-                    model="gpt-4o-transcribe-diarize",
-                    file=chunk_file,
-                    language="de",
-                    response_format="diarized_json",
-                    chunking_strategy="auto"
-                )
 
-            part_text = f"\n\n--- Part {index} ---\n\n"
+            if openai_button_clicked:
+                with st.spinner(f"Transcribing part {index} of {len(chunks)} with OpenAI..."):
+                    transcript = client.audio.transcriptions.create(
+                        model="gpt-4o-transcribe-diarize",
+                        file=chunk_file,
+                        language="de",
+                        response_format="diarized_json",
+                        chunking_strategy="auto"
+                    )
 
-            for segment in transcript.segments:
-                speaker = segment.speaker
-                text = segment.text
-                part_text += f"{speaker}:\n{text}\n\n"
+                part_text = f"\n\n--- Part {index} ---\n\n"
 
-            all_transcripts.append(part_text)
+                for segment in transcript.segments:
+                    speaker = segment.speaker
+                    text = segment.text
+                    part_text += f"{speaker}:\n{text}\n\n"
 
+                all_transcripts.append(part_text)
+
+            if whisper_button_clicked:
+                with st.spinner(f"Transcribing part {index} of {len(chunks)} with Local Whisper..."):
+                    segments, info = local_whisper_model.transcribe(
+                        chunk_file,
+                        language="de"
+                    )
+
+                part_text = f"\n\n--- Part {index} ---\n\n"
+
+                for segment in segments:
+                    part_text += f"{segment.text}\n"
+
+                all_transcripts.append(part_text)
         transcript_text = "".join(all_transcripts)
-
         with st.spinner("Organizing transcript with AI..."):
             cleanup_response = client.chat.completions.create(
                 model="gpt-4o-mini",
