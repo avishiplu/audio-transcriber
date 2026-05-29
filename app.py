@@ -82,13 +82,23 @@ if uploaded_file is not None:
         with st.spinner("Reading audio..."):
             audio_bytes = uploaded_file.read()
 
+        with st.spinner("Preparing audio for transcription..."):
+            prepared_audio = AudioSegment.from_file(BytesIO(audio_bytes))
+            prepared_audio = prepared_audio.set_channels(1)
+            prepared_audio = prepared_audio.set_frame_rate(16000)
+
         original_file_size_mb = len(audio_bytes) / (1024 * 1024)
         chunks = []
 
         if len(audio_bytes) <= SAFE_CHUNK_SIZE_BYTES:
-            original_audio_file = BytesIO(audio_bytes)
+            original_audio_file = BytesIO()
+            prepared_audio.export(
+                original_audio_file,
+                format="wav"
+            )
+
             original_audio_file.seek(0)
-            original_audio_file.name = uploaded_file.name
+            original_audio_file.name = f"{original_name}.wav"
             chunks.append(original_audio_file)
 
             st.info(
@@ -98,8 +108,7 @@ if uploaded_file is not None:
 
         else:
             with st.spinner("Audio is larger than 24 MB. Preparing smaller parts..."):
-                audio = AudioSegment.from_file(BytesIO(audio_bytes))
-
+                audio = prepared_audio
                 estimated_chunk_count = len(audio_bytes) // SAFE_CHUNK_SIZE_BYTES
 
                 if len(audio_bytes) % SAFE_CHUNK_SIZE_BYTES != 0:
