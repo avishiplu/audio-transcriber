@@ -28,6 +28,17 @@ MAX_SIZE_MB = 25
 
 st.title("German Class Audio Transcriber")
 
+access_code = st.text_input(
+    "Enter access code",
+    type="password"
+)
+
+correct_code = st.secrets.get("APP_ACCESS_CODE", os.getenv("APP_ACCESS_CODE"))
+
+if access_code != correct_code:
+    st.warning("Please enter the correct access code to use this app.")
+    st.stop()
+
 input_method = st.radio(
     "Choose audio input method",
     ["Upload audio file", "Record audio directly"]
