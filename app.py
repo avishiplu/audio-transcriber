@@ -187,8 +187,14 @@ if uploaded_file is not None:
 
                 part_text = f"\n\n--- Part {index} ---\n\n"
 
+                previous_line = ""
+
                 for segment in segments:
-                    part_text += f"{segment.text}\n"
+                    current_line = segment.text.strip()
+
+                    if current_line and current_line != previous_line:
+                        part_text += f"{current_line}\n"
+                        previous_line = current_line
 
                 all_transcripts.append(part_text)
         transcript_text = "".join(all_transcripts)
