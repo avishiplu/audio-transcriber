@@ -71,12 +71,21 @@ if uploaded_file is not None:
         for index, chunk_file in enumerate(chunks, start=1):
             with st.spinner(f"Transcribing part {index} of {len(chunks)}..."):
                 transcript = client.audio.transcriptions.create(
-                    model="gpt-4o-mini-transcribe",
+                    model="gpt-4o-transcribe-diarize",
                     file=chunk_file,
-                    language="de"
+                    language="de",
+                    response_format="diarized_json",
+                    chunking_strategy="auto"
                 )
 
-            all_transcripts.append(f"\n\n--- Part {index} ---\n\n{transcript.text}")
+            part_text = f"\n\n--- Part {index} ---\n\n"
+
+            for segment in transcript.segments:
+                speaker = segment.speaker
+                text = segment.text
+                part_text += f"{speaker}:\n{text}\n\n"
+
+            all_transcripts.append(part_text)
 
         transcript_text = "".join(all_transcripts)
        
