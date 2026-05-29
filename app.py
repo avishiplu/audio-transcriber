@@ -31,7 +31,17 @@ if uploaded_file is not None:
 
     st.success(f"Audio uploaded: {uploaded_file.name}")
 
-    if st.button("Split and Transcribe"):
+    button_clicked = st.button(
+        "Split and Transcribe",
+        disabled=st.session_state.get("processing", False)
+    )
+
+    if button_clicked:
+        st.session_state["processing"] = True
+
+        st.warning(
+            "Processing started. Please wait. Do not click again or refresh the page."
+        )
         with st.spinner("Reading audio..."):
             audio_bytes = uploaded_file.read()
             audio = AudioSegment.from_file(BytesIO(audio_bytes))
@@ -83,3 +93,5 @@ if uploaded_file is not None:
             file_name=transcript_file_name,
             mime="text/plain"
         )
+
+        st.session_state["processing"] = False
