@@ -29,7 +29,8 @@ def load_local_whisper_model():
 SAFE_CHUNK_SIZE_MB = 24
 SAFE_CHUNK_SIZE_BYTES = SAFE_CHUNK_SIZE_MB * 1024 * 1024
 
-st.title("German Class Audio Transcriber")
+st.title("Audio to Text Transcriber")
+st.caption("Upload or record audio, convert it into clean text, and download your transcript.")
 
 access_code = st.text_input(
     "Enter access code",
