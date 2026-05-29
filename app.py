@@ -26,6 +26,110 @@ def load_local_whisper_model():
         compute_type="int8"
     )
 
+WHISPER_LANGUAGES = {
+    "Auto Detect": None,
+    "Afrikaans": "af",
+    "Albanian": "sq",
+    "Amharic": "am",
+    "Arabic": "ar",
+    "Armenian": "hy",
+    "Assamese": "as",
+    "Azerbaijani": "az",
+    "Bashkir": "ba",
+    "Basque": "eu",
+    "Belarusian": "be",
+    "Bengali": "bn",
+    "Bosnian": "bs",
+    "Breton": "br",
+    "Bulgarian": "bg",
+    "Cantonese": "yue",
+    "Catalan": "ca",
+    "Chinese": "zh",
+    "Croatian": "hr",
+    "Czech": "cs",
+    "Danish": "da",
+    "Dutch": "nl",
+    "English": "en",
+    "Estonian": "et",
+    "Faroese": "fo",
+    "Finnish": "fi",
+    "French": "fr",
+    "Galician": "gl",
+    "Georgian": "ka",
+    "German": "de",
+    "Greek": "el",
+    "Gujarati": "gu",
+    "Haitian Creole": "ht",
+    "Hausa": "ha",
+    "Hawaiian": "haw",
+    "Hebrew": "he",
+    "Hindi": "hi",
+    "Hungarian": "hu",
+    "Icelandic": "is",
+    "Indonesian": "id",
+    "Italian": "it",
+    "Japanese": "ja",
+    "Javanese": "jw",
+    "Kannada": "kn",
+    "Kazakh": "kk",
+    "Khmer": "km",
+    "Korean": "ko",
+    "Lao": "lo",
+    "Latin": "la",
+    "Latvian": "lv",
+    "Lingala": "ln",
+    "Lithuanian": "lt",
+    "Luxembourgish": "lb",
+    "Macedonian": "mk",
+    "Malagasy": "mg",
+    "Malay": "ms",
+    "Malayalam": "ml",
+    "Maltese": "mt",
+    "Maori": "mi",
+    "Marathi": "mr",
+    "Mongolian": "mn",
+    "Myanmar": "my",
+    "Nepali": "ne",
+    "Norwegian": "no",
+    "Nynorsk": "nn",
+    "Occitan": "oc",
+    "Pashto": "ps",
+    "Persian": "fa",
+    "Polish": "pl",
+    "Portuguese": "pt",
+    "Punjabi": "pa",
+    "Romanian": "ro",
+    "Russian": "ru",
+    "Sanskrit": "sa",
+    "Serbian": "sr",
+    "Shona": "sn",
+    "Sindhi": "sd",
+    "Sinhala": "si",
+    "Slovak": "sk",
+    "Slovenian": "sl",
+    "Somali": "so",
+    "Spanish": "es",
+    "Sundanese": "su",
+    "Swahili": "sw",
+    "Swedish": "sv",
+    "Tagalog": "tl",
+    "Tajik": "tg",
+    "Tamil": "ta",
+    "Tatar": "tt",
+    "Telugu": "te",
+    "Thai": "th",
+    "Tibetan": "bo",
+    "Turkish": "tr",
+    "Turkmen": "tk",
+    "Ukrainian": "uk",
+    "Urdu": "ur",
+    "Uzbek": "uz",
+    "Vietnamese": "vi",
+    "Welsh": "cy",
+    "Yiddish": "yi",
+    "Yoruba": "yo",
+}
+
 SAFE_CHUNK_SIZE_MB = 24
 SAFE_CHUNK_SIZE_BYTES = SAFE_CHUNK_SIZE_MB * 1024 * 1024
 
@@ -47,6 +151,14 @@ input_method = st.radio(
     "Choose audio input method",
     ["Upload audio file", "Record audio directly"]
 )
+
+selected_language_name = st.selectbox(
+    "Choose audio language",
+    list(WHISPER_LANGUAGES.keys())
+)
+
+selected_language_code = WHISPER_LANGUAGES[selected_language_name]
+
 
 if input_method == "Upload audio file":
     uploaded_file = st.file_uploader(
@@ -161,11 +273,18 @@ if uploaded_file is not None:
 
             if openai_button_clicked:
                 with st.spinner(f"Transcribing part {index} of {len(chunks)} with OpenAI..."):
+                    openai_transcription_kwargs = {
+                        "model": "gpt-4o-transcribe-diarize",
+                        "file": chunk_file,
+                        "response_format": "diarized_json",
+                        "chunking_strategy": "auto"
+                    }
+
+                    if selected_language_code is not None:
+                        openai_transcription_kwargs["language"] = selected_language_code
+
                     transcript = client.audio.transcriptions.create(
-                        model="gpt-4o-transcribe-diarize",
-                        file=chunk_file,
-                        response_format="diarized_json",
-                        chunking_strategy="auto"
+                        **openai_transcription_kwargs
                     )
 
                 part_text = f"\n\n--- Part {index} ---\n\n"
@@ -180,8 +299,14 @@ if uploaded_file is not None:
             if whisper_button_clicked:
                 with st.spinner(f"Transcribing part {index} of {len(chunks)} with Local Whisper..."):
                     local_whisper_model = load_local_whisper_model()
+                    whisper_transcription_kwargs = {}
+
+                    if selected_language_code is not None:
+                        whisper_transcription_kwargs["language"] = selected_language_code
+
                     segments, info = local_whisper_model.transcribe(
                         chunk_file,
+                        **whisper_transcription_kwargs
                     )
 
                 part_text = f"\n\n--- Part {index} ---\n\n"
