@@ -61,7 +61,7 @@ if uploaded_file is not None:
         for index, chunk_file in enumerate(chunks, start=1):
             with st.spinner(f"Transcribing part {index} of {len(chunks)}..."):
                 transcript = client.audio.transcriptions.create(
-                    model="whisper-1",
+                    model="gpt-4o-mini-transcribe",
                     file=chunk_file,
                     language="de"
                 )
