@@ -20,6 +20,8 @@ client = OpenAI(api_key=api_key)
 
 @st.cache_resource
 def load_local_whisper_model():
+    from faster_whisper import WhisperModel
+
     return WhisperModel(
         "large-v3-turbo",
         device="cpu",
