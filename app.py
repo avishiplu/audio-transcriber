@@ -23,7 +23,7 @@ def load_local_whisper_model():
     from faster_whisper import WhisperModel
 
     return WhisperModel(
-        "large-v3-turbo",
+        "small",
         device="cpu",
         compute_type="int8"
     )
