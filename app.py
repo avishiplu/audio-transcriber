@@ -1,11 +1,13 @@
 import os
+import subprocess
+import tempfile
 from io import BytesIO
 from pathlib import Path
 
 import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
-from pydub import AudioSegment
+
 
 load_dotenv()
 
@@ -144,6 +146,63 @@ WHISPER_LANGUAGES = {
 SAFE_CHUNK_SIZE_MB = 24
 SAFE_CHUNK_SIZE_BYTES = SAFE_CHUNK_SIZE_MB * 1024 * 1024
 
+def get_audio_duration_seconds(input_file_path):
+    command = [
+        "ffprobe",
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(input_file_path)
+    ]
+
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=True
+    )
+
+    return float(result.stdout.strip())
+
+
+def create_safe_audio_chunks_with_ffmpeg(input_file_path, output_dir, original_name):
+    segment_seconds = 30 * 60
+
+    while segment_seconds >= 60:
+        for old_chunk in Path(output_dir).glob("*.mp3"):
+            old_chunk.unlink()
+
+        output_pattern = str(Path(output_dir) / f"{original_name}_part_%03d.mp3")
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-i", str(input_file_path),
+            "-ac", "1",
+            "-ar", "16000",
+            "-b:a", "64k",
+            "-f", "segment",
+            "-segment_time", str(segment_seconds),
+            "-reset_timestamps", "1",
+            output_pattern
+        ]
+
+        subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        chunk_paths = sorted(Path(output_dir).glob("*.mp3"))
+
+        if chunk_paths and all(chunk.stat().st_size <= SAFE_CHUNK_SIZE_BYTES for chunk in chunk_paths):
+            return chunk_paths, segment_seconds
+
+        segment_seconds = segment_seconds // 2
+
+    raise ValueError("Could not create safe audio chunks below the size limit.")
+
 st.title("Audio to Text Transcriber")
 st.caption("Upload or record audio, convert it into clean text, and download your transcript.")
 
@@ -209,57 +268,38 @@ if uploaded_file is not None:
         st.warning(
             "Processing started. Please wait. Do not click again or refresh the page."
         )
-        with st.spinner("Reading audio..."):
+        with st.spinner("Saving uploaded audio safely..."):
             audio_bytes = uploaded_file.read()
+            original_file_size_mb = len(audio_bytes) / (1024 * 1024)
 
-        with st.spinner("Preparing audio for transcription..."):
-            prepared_audio = AudioSegment.from_file(BytesIO(audio_bytes))
-            prepared_audio = prepared_audio.set_channels(1)
-            prepared_audio = prepared_audio.set_frame_rate(16000)
+            temp_dir = tempfile.mkdtemp()
+            input_file_path = Path(temp_dir) / uploaded_file.name
 
-        original_file_size_mb = len(audio_bytes) / (1024 * 1024)
+            with open(input_file_path, "wb") as input_file:
+                input_file.write(audio_bytes)
+
         chunks = []
 
-        with st.spinner("Splitting audio into safe parts..."):
-            max_chunk_length_ms = 30 * 60 * 1000  # 30 minutes
-            audio = prepared_audio
-            temporary_chunks = []
+        with st.spinner("Splitting audio into safe parts with FFmpeg..."):
+            audio_duration_seconds = get_audio_duration_seconds(input_file_path)
 
-            for start_ms in range(0, len(audio), max_chunk_length_ms):
-                end_ms = start_ms + max_chunk_length_ms
-                temporary_chunks.append(audio[start_ms:end_ms])
+            chunk_paths, used_segment_seconds = create_safe_audio_chunks_with_ffmpeg(
+                input_file_path=input_file_path,
+                output_dir=temp_dir,
+                original_name=original_name
+            )
 
-            for temporary_chunk in temporary_chunks:
-                parts_to_check = [temporary_chunk]
-
-                while parts_to_check:
-                    current_part = parts_to_check.pop(0)
-
-                    chunk_file = BytesIO()
-                    current_part.export(
-                        chunk_file,
-                        format="mp3",
-                        bitrate="64k"
-                    )
-
-                    chunk_file.seek(0)
-
-                    if len(chunk_file.getvalue()) <= SAFE_CHUNK_SIZE_BYTES:
-                        chunk_file.name = f"{original_name}_part_{len(chunks) + 1}.mp3"
-                        chunks.append(chunk_file)
-
-                    else:
-                        middle_ms = len(current_part) // 2
-                        first_half = current_part[:middle_ms]
-                        second_half = current_part[middle_ms:]
-
-                        parts_to_check.append(first_half)
-                        parts_to_check.append(second_half)
+            for chunk_path in chunk_paths:
+                chunk_bytes = chunk_path.read_bytes()
+                chunk_file = BytesIO(chunk_bytes)
+                chunk_file.name = chunk_path.name
+                chunks.append(chunk_file)
 
         st.info(
             f"Audio size is {original_file_size_mb:.2f} MB. "
-            f"Audio length is {len(audio) / 60000:.1f} minutes. "
-            f"Audio prepared as {len(chunks)} part(s)."
+            f"Audio length is {audio_duration_seconds / 60:.1f} minutes. "
+            f"Audio prepared as {len(chunks)} part(s). "
+            f"Each part is about {used_segment_seconds / 60:.1f} minutes or smaller."
         )
 
         all_transcripts = []
