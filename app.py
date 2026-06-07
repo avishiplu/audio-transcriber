@@ -6,7 +6,6 @@ import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
 from pydub import AudioSegment
-from faster_whisper import WhisperModel
 
 load_dotenv()
 
@@ -17,6 +16,16 @@ if not api_key:
     st.stop()
 
 client = OpenAI(api_key=api_key)
+
+groq_api_key = st.secrets.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
+
+groq_client = None
+
+if groq_api_key:
+    groq_client = OpenAI(
+        api_key=groq_api_key,
+        base_url="https://api.groq.com/openai/v1"
+    )
 
 @st.cache_resource
 def load_local_whisper_model():
@@ -181,12 +190,18 @@ if uploaded_file is not None:
         disabled=st.session_state.get("processing", False)
     )
 
+    groq_button_clicked = st.button(
+        "Transcribe with Groq Fast Engine",
+        disabled=st.session_state.get("processing", False)
+    )
+
+
     whisper_button_clicked = st.button(
         "Transcribe with Local Whisper",
         disabled=st.session_state.get("processing", False)
     )
 
-    button_clicked = openai_button_clicked or whisper_button_clicked
+    button_clicked = openai_button_clicked or groq_button_clicked or whisper_button_clicked
 
     if button_clicked:
         st.session_state["processing"] = True
@@ -276,6 +291,30 @@ if uploaded_file is not None:
 
                 all_transcripts.append(part_text)
 
+            if groq_button_clicked:
+                if groq_client is None:
+                    st.error("GROQ_API_KEY not found. Please add it to Streamlit Secrets.")
+                    st.stop()
+
+                with st.spinner(f"Transcribing part {index} of {len(chunks)} with Groq Fast Engine..."):
+                    groq_transcription_kwargs = {
+                        "model": "whisper-large-v3-turbo",
+                        "file": chunk_file,
+                        "response_format": "text"
+                    }
+
+                    if selected_language_code is not None:
+                        groq_transcription_kwargs["language"] = selected_language_code
+
+                    transcript = groq_client.audio.transcriptions.create(
+                        **groq_transcription_kwargs
+                    )
+
+                part_text = f"\n\n--- Part {index} ---\n\n"
+                part_text += str(transcript)
+
+                all_transcripts.append(part_text)
+
             if whisper_button_clicked:
                 with st.spinner(f"Transcribing part {index} of {len(chunks)} with Local Whisper..."):
                     local_whisper_model = load_local_whisper_model()
@@ -302,31 +341,33 @@ if uploaded_file is not None:
 
                 all_transcripts.append(part_text)
         transcript_text = "".join(all_transcripts)
-        with st.spinner("Organizing transcript with AI..."):
-            cleanup_response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You clean and organize audio transcripts in the same language as the transcript. "
-                            "Do not translate the transcript. "
-                            "Do not add new information. "
-                            "Do not summarize. "
-                            "Do not remove important content. "
-                            "Only fix obvious transcription mistakes, improve spacing, punctuation, "
-                            "speaker labels, and make the transcript easier to read."
-                        )
-                    },
-                    {
-                        "role": "user",
-                        "content": transcript_text
-                    }
-                ],
-                temperature=0.2
-            )
 
-            transcript_text = cleanup_response.choices[0].message.content
+        if openai_button_clicked:
+            with st.spinner("Organizing transcript with AI..."):
+                cleanup_response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You clean and organize audio transcripts in the same language as the transcript. "
+                                "Do not translate the transcript. "
+                                "Do not add new information. "
+                                "Do not summarize. "
+                                "Do not remove important content. "
+                                "Only fix obvious transcription mistakes, improve spacing, punctuation, "
+                                "speaker labels, and make the transcript easier to read."
+                            )
+                        },
+                        {
+                            "role": "user",
+                            "content": transcript_text
+                        }
+                    ],
+                    temperature=0.2
+                )
+
+                transcript_text = cleanup_response.choices[0].message.content
 
 
         transcript_file_name = f"{original_name}.txt"
