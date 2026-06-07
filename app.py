@@ -203,69 +203,47 @@ if uploaded_file is not None:
         original_file_size_mb = len(audio_bytes) / (1024 * 1024)
         chunks = []
 
-        if len(audio_bytes) <= SAFE_CHUNK_SIZE_BYTES:
-            original_audio_file = BytesIO()
-            prepared_audio.export(
-                original_audio_file,
-                format="wav"
-            )
+        with st.spinner("Splitting audio into safe parts..."):
+            max_chunk_length_ms = 30 * 60 * 1000  # 30 minutes
+            audio = prepared_audio
+            temporary_chunks = []
 
-            original_audio_file.seek(0)
-            original_audio_file.name = f"{original_name}.wav"
-            chunks.append(original_audio_file)
+            for start_ms in range(0, len(audio), max_chunk_length_ms):
+                end_ms = start_ms + max_chunk_length_ms
+                temporary_chunks.append(audio[start_ms:end_ms])
 
-            st.info(
-                f"Audio size is {original_file_size_mb:.2f} MB. "
-                "No splitting needed."
-            )
+            for temporary_chunk in temporary_chunks:
+                parts_to_check = [temporary_chunk]
 
-        else:
-            with st.spinner("Audio is larger than 24 MB. Preparing smaller parts..."):
-                audio = prepared_audio
-                estimated_chunk_count = len(audio_bytes) // SAFE_CHUNK_SIZE_BYTES
+                while parts_to_check:
+                    current_part = parts_to_check.pop(0)
 
-                if len(audio_bytes) % SAFE_CHUNK_SIZE_BYTES != 0:
-                    estimated_chunk_count += 1
+                    chunk_file = BytesIO()
+                    current_part.export(
+                        chunk_file,
+                        format="mp3",
+                        bitrate="64k"
+                    )
 
-                chunk_length_ms = len(audio) // estimated_chunk_count
+                    chunk_file.seek(0)
 
-                temporary_chunks = []
+                    if len(chunk_file.getvalue()) <= SAFE_CHUNK_SIZE_BYTES:
+                        chunk_file.name = f"{original_name}_part_{len(chunks) + 1}.mp3"
+                        chunks.append(chunk_file)
 
-                for start_ms in range(0, len(audio), chunk_length_ms):
-                    end_ms = start_ms + chunk_length_ms
-                    temporary_chunks.append(audio[start_ms:end_ms])
+                    else:
+                        middle_ms = len(current_part) // 2
+                        first_half = current_part[:middle_ms]
+                        second_half = current_part[middle_ms:]
 
-                for temporary_chunk in temporary_chunks:
-                    parts_to_check = [temporary_chunk]
+                        parts_to_check.append(first_half)
+                        parts_to_check.append(second_half)
 
-                    while parts_to_check:
-                        current_part = parts_to_check.pop(0)
-
-                        chunk_file = BytesIO()
-                        current_part.export(
-                            chunk_file,
-                            format="mp3",
-                            bitrate="64k"
-                        )
-
-                        chunk_file.seek(0)
-
-                        if len(chunk_file.getvalue()) <= SAFE_CHUNK_SIZE_BYTES:
-                            chunk_file.name = f"{original_name}_part_{len(chunks) + 1}.mp3"
-                            chunks.append(chunk_file)
-
-                        else:
-                            middle_ms = len(current_part) // 2
-                            first_half = current_part[:middle_ms]
-                            second_half = current_part[middle_ms:]
-
-                            parts_to_check.append(first_half)
-                            parts_to_check.append(second_half)
-
-            st.info(
-                f"Audio size is {original_file_size_mb:.2f} MB. "
-                f"Audio split into {len(chunks)} parts."
-            )
+        st.info(
+            f"Audio size is {original_file_size_mb:.2f} MB. "
+            f"Audio length is {len(audio) / 60000:.1f} minutes. "
+            f"Audio prepared as {len(chunks)} part(s)."
+        )
 
         all_transcripts = []
 
